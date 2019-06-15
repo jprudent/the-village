@@ -12,20 +12,8 @@
                               :empty-bucket 1}
                     :outputs {:filled-bucket 1}}})
 
-(defprotocol Storage
-  (retrieve [storage n]
-    "retrieve n goods from storage.
-    IN : - n : the number of good to be retrieved
-    OUT : - success : [storage-updated goods]
-          - failure : [storage-updated failure]")
-  (store [storage good]
-    "stock a good.
-    IN : - good : the good to store
-    OUT : - success : [storage-updated]
-          - failure : [storage-updated failure]"))
-
 (defprotocol Factory
-  (cook [factory] "the factory will try to produce
-  something")
+  (cook [factory] "the factory will try to apply the
+  receipe")
   (exchange-output [factory output exchanged-good]
     "Exchange an output good for something else"))
