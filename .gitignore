@@ -3,4 +3,7 @@
 .cpcache/
 .nrepl-port
 nashorn_code_cache/
+out/target
 out/
+target/
+.rebel_readline_history

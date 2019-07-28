@@ -1,19 +1,24 @@
-{:deps {org.clojure/core.async {:mvn/version "0.4.490"}}
+{:deps {org.clojure/clojure {:mvn/version "1.10.1"}}
+ :paths ["src" "resources" "target"]
  :aliases
-       {:cljs     {:extra-deps {org.clojure/clojurescript {:mvn/version "1.10.516"}}}
-        :clj      {:extra-deps {org.clojure/clojure {:mvn/version "1.10.0"}}}
+       {:cljs     {:extra-deps {org.clojure/clojurescript       {:mvn/version "1.10.516"}
+                                com.bhauman/rebel-readline-cljs {:mvn/version "0.1.4"}}}
         :dev-node {:main-opts ["--main" "cljs.main"
                                "-re" "node"
                                "--repl"]}
-        :nrepl    {:extra-deps
-                              {nrepl/nrepl      {:mvn/version "0.6.0"}
-                               cider/piggieback {:mvn/version "0.4.1"}}
-                   :main-opts ["--main" "nrepl.cmdline"
-                               "--port" "24555"
-                               "--middleware" "[cider.piggieback/wrap-cljs-repl]"]}
+        :nrepl    {:extra-deps {nrepl/nrepl      {:mvn/version "0.6.0"}
+                                cider/piggieback {:mvn/version "0.4.1"}}
+                   :main-opts  ["--main" "nrepl.cmdline"
+                                "--port" "24555"
+                                "--middleware" "[cider.piggieback/wrap-cljs-repl]"]}
 
         :test     {:extra-paths ["test"]
                    :extra-deps  {com.cognitect/test-runner
                                  {:git/url "https://github.com/cognitect-labs/test-runner.git"
                                   :sha     "209b64504cb3bd3b99ecfec7937b358a879f55c1"}}
-                   :main-opts   ["-m" "cognitect.test-runner"]}}}
+                   :main-opts   ["-m" "cognitect.test-runner"]}
+
+        :figwheel {:extra-deps {com.bhauman/figwheel-main {:mvn/version "0.2.3"}}
+                   :main-opts  ["-m" "figwheel.main"
+                                "--build" "web"
+                                "--repl"]}}}
