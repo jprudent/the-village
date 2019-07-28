@@ -1,5 +1,6 @@
 (ns the-village.web.core
-  (:require [quil.core :as q :include-macros true]))
+  (:require [quil.core :as q :include-macros true]
+            [the-village.utils.missing :as u]))
 
 ;; point utils
 (def x first)
@@ -9,7 +10,8 @@
 (def background-color [0x23 0xCE 0x6B])
 (def grid-color [0x03 0xAE 0x4B])
 (def icon-color [0xC1 0x59 0x24])
-(def highlight-color [0xAA 0x40 0x7E])
+(def other-color [0xFF 0xBE 0x5B])
+
 (defn inverse-color [color]
   (map #(- 0xFF %) color))
 
@@ -31,10 +33,33 @@
 ;; [x y]
 (def icon-size cell-size)
 (def half-icon-size (int (/ icon-size 2)))
-(def toolbar-size [0 (- (y canva-size) icon-size)])
-(def toolbar-nb-icons 1)
+(def toolbar [0 (- (y canva-size) icon-size)])
 
-(defonce state (atom {:dragging-icon false}))
+(defrecord Icon
+  [text
+   toolbar-position
+   dragging?])
+
+(def well-icon
+  (map->Icon {:toolbar-position 0
+              :dragging?        false
+              :text             "WELL"}))
+
+(def dwell-icon
+  (map->Icon {:toolbar-position 1
+              :dragging?        false
+              :text             "DWELL"}))
+
+(def bakery-icon
+  (map->Icon {:toolbar-position 2
+              :dragging?        false
+              :text             "BAKERY"}))
+
+(defonce state (atom {:toolbar-icons
+                                {:well   well-icon
+                                 :dwell  dwell-icon
+                                 :bakery bakery-icon}
+                  :village-grid {}}))
 
 (defn setup
   []
@@ -62,8 +87,9 @@
       (q/text-align :left)
       (q/text (str capt " " (fn)) 10 (+ (* 20 ind) 20)))))
 
-(defn make-icon
-  ([x1 y1 icon-bg-color text]
+(defn draw-icon
+  ([text x1 y1 icon-bg-color]
+   "draw the icon"
    (q/with-fill icon-bg-color
      (q/rect x1 y1 icon-size icon-size 5))
    (q/with-stroke 15
@@ -71,54 +97,104 @@
        (q/text-align :center :center)
        (q/text text x1 y1 icon-size icon-size)))))
 
-(defn make-well-icon
-  ([] (make-well-icon icon-color))
-  ([icon-bg-color] (make-well-icon 0 (- (y canva-size) icon-size) icon-bg-color))
-  ([x1 y1 icon-bg-color]
-   (make-icon x1 y1 icon-bg-color "WELL")))
+(defn draw-toolbar-icon
+  [icon]
+  (draw-icon (:text icon)
+             (+ (x toolbar) (* (:toolbar-position icon) icon-size))
+             (y toolbar)
+             icon-color))
 
-(defn highlight-cell-at-mouse
+(defn draw-selected-toolbar-icon
+  [icon]
+  (draw-icon (:text icon)
+             (+ (x toolbar) (* (:toolbar-position icon) icon-size))
+             (y toolbar)
+             (inverse-color icon-color)))
+
+(defn draw-icon-at
+  [icon x y bg-color]
+  (draw-icon (:text icon) x y bg-color))
+
+(defn cell-at-mouse-pos
   []
-  (let [x (- (q/mouse-x) (mod (q/mouse-x) cell-size))
-        y (- (q/mouse-y) (mod (q/mouse-y) cell-size))]
-    (make-well-icon x y (inverse-color icon-color))))
+  [(- (q/mouse-x) (mod (q/mouse-x) cell-size))
+   (- (q/mouse-y) (mod (q/mouse-y) cell-size))])
+
+(defn preview-icon-at-mouse
+  [icon]
+  (let [[x y] (cell-at-mouse-pos)]
+    (draw-icon-at icon x y (inverse-color icon-color))))
+
+(defn draw-icon-at-mouse
+  [icon]
+  (let [[x y] (cell-at-mouse-pos)]
+    (draw-icon-at icon x y icon-color)))
 
 (defn dragging-icon? [] (:dragging-icon @state))
 
+(defn dragging-icon
+  []
+  (->> (:toolbar-icons @state)
+       (filter (fn [[_ icon :as kv]] (:dragging? icon)))
+       (first)))
+
 (defn move-mouse-icon
   []
+  (when-let [[icon-name _] (and (not (q/mouse-pressed?))
+                                (dragging-icon))]
+    (do
+      (swap! state
+             (fn [state]
+               (-> state
+                   (update :toolbar-icons
+                           u/map-vals #(assoc % :dragging? false))
+                   (update :village-grid
+                           assoc (cell-at-mouse-pos) icon-name))))))
 
-  (when (and (not (q/mouse-pressed?)) (dragging-icon?))
-    (swap! state assoc :dragging-icon false))
+  (when-let [icon-name (and (q/mouse-pressed?)
+                            (< (y toolbar) (q/mouse-y) (y canva-size))
+                            (some (fn [[icon-name icon]]
+                                    (when (< (x toolbar)
+                                             (q/mouse-x)
+                                             (+ icon-size
+                                                (* (:toolbar-position icon) icon-size)))
+                                      icon-name))
+                                  (:toolbar-icons @state)))]
+    (swap! state assoc-in [:toolbar-icons icon-name :dragging?] true))
 
-  (when (and (q/mouse-pressed?)
-             (< (x toolbar-size) (q/mouse-x) (* toolbar-nb-icons icon-size))
-             (< (y toolbar-size) (q/mouse-y) (y canva-size)))
-    (swap! state assoc :dragging-icon true))
-
-  (when (dragging-icon?)
-    (do (make-well-icon (inverse-color icon-color))
-        (highlight-cell-at-mouse)
-        (make-well-icon (- (q/mouse-x) half-icon-size)
-                        (- (q/mouse-y) half-icon-size)
-                        icon-color))))
+  (when-let [[_ icon] (dragging-icon)]
+    (do (preview-icon-at-mouse icon)
+        (draw-icon-at icon
+                      (- (q/mouse-x) half-icon-size)
+                      (- (q/mouse-y) half-icon-size)
+                      icon-color))))
 
 (defn mouse-handler
   []
   (move-mouse-icon))
 
-(defn keyboard-handler
-  [])
+(defn draw-toolbar-icons
+  []
+  (doseq [{:keys [dragging?] :as icon} (vals (:toolbar-icons @state))]
+    (if dragging?
+      (draw-selected-toolbar-icon icon)
+      (draw-toolbar-icon icon))))
+
+(defn draw-grid-icons
+  []
+  (doseq [[[x y] icon-name] (:village-grid @state)
+          :let [icon (get-in @state [:toolbar-icons icon-name])]]
+    (draw-icon-at icon x y icon-color)))
 
 (defn draw []
   (apply q/background background-color)
   (make-grid canva-size)
   (debug-mouse)
-  (make-well-icon)
-  (mouse-handler)
-  (keyboard-handler))
+  (draw-toolbar-icons)
+  (draw-grid-icons)
+  (mouse-handler))
 
 (q/defsketch app
              :draw draw
              :host "app"
-             :size canva-size)
+             :size canva-size)   
