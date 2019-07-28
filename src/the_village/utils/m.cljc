@@ -1,4 +1,6 @@
-(ns the-village.m)
+(ns
+  "LISP cursed monadic library"
+  the-village.utils.m)
 
 (defrecord R [e v ex])
 
@@ -22,8 +24,7 @@
                  (merge e {:failure-type failure-type} extra)))))
 
 
-
-(defmacro ->
+(defmacro then
   "like a -> macro but for results"
   [r body]
   (let [[f# & args#] body]

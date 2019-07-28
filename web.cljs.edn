@@ -1,2 +1,4 @@
 ;cljs compiler options
+^{:watch-dirs ["src" "test"]
+  :extra-main-files {:test {:main the-village.engine.factory-sync-test}}}
 {:main the-village.web.core}

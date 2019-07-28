@@ -1,8 +1,8 @@
-(ns the-village.factory-sync
-  (:require [the-village.factory :as factory]
-            [the-village.storage :as storage]
-            [the-village.utils :as u]
-            [the-village.m :as m]))
+(ns the-village.engine.factory-sync
+  (:require [the-village.engine.factory :as factory]
+            [the-village.engine.storage :as storage]
+            [the-village.engine.utils :as u]
+            [the-village.utils.m :as m]))
 
 (defrecord SeqStorage [vals capacity on-overflow]
   storage/Storage
@@ -22,7 +22,7 @@
               :good-requested good)
         :destroy
         (-> (storage/gather this 1)
-            (m/-> (storage/store good))))
+            (m/then (storage/store good))))
       (m/ok (update this :vals conj good)))))
 
 (defn- implement-storage
@@ -49,7 +49,7 @@
         good-k
         (nth (iterate
                (fn [output-storage]
-                 (m/-> output-storage
+                 (m/then output-storage
                        (storage/store (create-good good-k))))
                (m/ok (get acc good-k)))
              good-qty)))
@@ -61,10 +61,10 @@
   (take [exchange factory]))
 
 (extend-protocol Take
-  the_village.factory.Free
+  the_village.engine.factory.Free
   (take [free factory] (m/ok factory))
 
-  the_village.factory.Good
+  the_village.engine.factory.Good
   (take [{:keys [kind amount] :as _good}
          {:keys [output-storages] :as factory}]
     (let [result (storage/gather (kind output-storages)
@@ -101,7 +101,7 @@
                                       (create-good input))]
       (if (m/ok? store-result)
         (-> (take exchanged-good factory)
-            (m/-> (update-in [:input-storages input] (:e
+            (m/then (update-in [:input-storages input] (:e
                                                        store-result))))
         (m/ko factory :overflow "the factory is full"
               :cause store-result)))))

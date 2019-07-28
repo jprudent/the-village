@@ -1,4 +1,4 @@
-(ns the-village.storage)
+(ns the-village.engine.storage)
 
 (defprotocol Storage
   (gather [storage n]

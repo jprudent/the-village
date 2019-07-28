@@ -1,4 +1,4 @@
-(ns the-village.factory)
+(ns the-village.engine.factory)
 
 (def well-config
   {:input-storages  {:unit-of-work {:capacity    0
