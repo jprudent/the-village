@@ -1,6 +1,7 @@
 (ns the-village.factory-sync-test
   (:require [clojure.test :refer :all])
   (:require [the-village.factory-sync :as sut]
+            [the-village.factory :as factory]
             [the-village.m :as m]
             [the-village.storage :as storage]))
 
@@ -40,3 +41,19 @@
                    (m/-> (storage/gather 1)))]
     (is (= (m/ok (sut/->SeqStorage [:y] 2 :reject) [:x])
            actual))))
+
+(deftest FactorySync-test
+  (testing "shortage"
+    (let [result (-> (sut/->sync-factory factory/well-config)
+                     (factory/cook))]
+      (is (m/ko? result))
+      (is (not (m/ok? result)))
+      (is (= :shortage (-> result :ex ex-data :failure-type)))))
+  (testing "ok"
+      (let [result (-> (sut/->sync-factory factory/well-config)
+                       (factory/supply :empty-bucket
+                                       factory/free)
+                       (factory/cook))]
+        (is (m/ko? result))
+        (is (not (m/ok? result)))
+        (is (= :shortage (-> result :ex ex-data :failure-type))))))

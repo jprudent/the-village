@@ -27,34 +27,84 @@
 
 (defn- implement-storage
   [conf]
-  (reduce-kv
+  (reduce
     #(update %1 %2 u/map-vals map->SeqStorage)
     conf
-    [:inputs :outputs]))
+    [:input-storages :output-storages]))
 
 (defn- gather-goods
-  [inputs receipe]
+  [input-storages receipe-inputs]
   (reduce-kv
     #(update %1 %2 storage/gather %3)
-    inputs
-    receipe))
+    input-storages
+    receipe-inputs))
 
-(def ^:private retrieved? (comp (complement u/ex?) second))
+(defn- create-good [good-key] good-key)
 
-(defn result [receipe goods]
-  (:outputs receipe))
+(defn- store-goods
+  [output-storages receipe-outputs]
+  (reduce-kv
+    (fn [acc good-k good-qty]
+      (assoc acc
+        good-k
+        (nth (iterate
+               (fn [output-storage]
+                 (m/-> output-storage
+                       (storage/store (create-good good-k))))
+               (m/ok (get acc good-k)))
+             good-qty)))
+    output-storages
+    receipe-outputs))
 
-(defrecord SyncFactory [inputs outputs receipe]
+
+(defprotocol Take
+  (take [exchange factory]))
+
+(extend-protocol Take
+  the_village.factory.Free
+  (take [free factory] (m/ok factory))
+
+  the_village.factory.Good
+  (take [{:keys [kind amount] :as _good}
+         {:keys [output-storages] :as factory}]
+    (let [result (storage/gather (kind output-storages)
+                                 amount)]
+      (if (m/ok? result)
+        (m/ok (update-in factory
+                         [:output-storages kind]
+                         (:e result))
+              (:v result))
+        (m/ko factory :shortage "not enough good"
+              :nested result)))))
+
+(defrecord SyncFactory [input-storages
+                        output-storages
+                        receipe]
   factory/Factory
   (cook [this]
-    ;; get the ingredients
-    (let [maybe-goods (gather-goods inputs (:inputs receipe))]
-      (if (every? retrieved? gather-goods)
-        [(assoc this :inputs (u/map-vals maybe-goods first))
-         (result receipe (u/map-vals maybe-goods second))]
-        [this (ex-info "unable to retrieve some goods"
-                       (assoc this :maybe-goods maybe-goods
-                                   :failure-type :shortage))]))))
+    (let [input-goods (gather-goods input-storages
+                                    (:inputs receipe))]
+      (if (every? m/ok? input-goods)
+        (let [output-goods (store-goods output-storages
+                                        (:outputs receipe))]
+          (if (every? m/ok? output-goods)
+            (m/ok (-> (assoc this :inputs (u/map-vals input-goods :e))
+                      (update :outputs (u/map-vals output-goods :e))))
+            (m/ko this :overflow "the factory is full"
+                  :maybe-goods input-goods
+                  :output-goods output-goods))
+          (m/ko this :shortage "not enough good"
+                :maybe-goods input-goods)))))
+
+  (supply [factory input exchanged-good]
+    (let [store-result (storage/store (input input-storages)
+                                      (create-good input))]
+      (if (m/ok? store-result)
+        (-> (take exchanged-good factory)
+            (m/-> (update-in [:input-storages input] (:e
+                                                       store-result))))
+        (m/ko factory :overflow "the factory is full"
+              :cause store-result)))))
 
 (defn ->sync-factory [config]
   (map->SyncFactory (implement-storage config)))
