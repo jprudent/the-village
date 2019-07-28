@@ -1,4 +1,5 @@
-;cljs compiler options
+; figwheel options
 ^{:watch-dirs ["src" "test"]
-  :extra-main-files {:test {:main the-village.engine.factory-sync-test}}}
+  :auto-testing true}
+;cljs compiler options
 {:main the-village.web.core}

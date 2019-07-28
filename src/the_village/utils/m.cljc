@@ -1,6 +1,5 @@
-(ns
-  "LISP cursed monadic library"
-  the-village.utils.m)
+(ns the-village.utils.m
+  "LISP cursed monadic library")
 
 (defrecord R [e v ex])
 

@@ -1,4 +1,4 @@
-(ns the-village.engine.utils
+(ns the-village.utils.missing
   "pure Clojure functions that are missing a built in")
 
 (defn map-vals

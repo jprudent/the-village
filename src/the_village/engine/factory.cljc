@@ -11,10 +11,12 @@
                                :empty-bucket 1}
                      :outputs {:filled-bucket 1}}})
 
+;; -- things factory can trade
 (defrecord Free [])
 (defrecord Money [amount])
 (defrecord Good [amount])
 
+;; -- public interface of a factory
 (defprotocol Factory
   (cook [factory]
     "the factory will try to apply the receipe.
