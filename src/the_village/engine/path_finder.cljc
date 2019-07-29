@@ -2,7 +2,7 @@
   "no brainer path finding algorithm
   inspired from https://www.redblobgames.com/pathfinding/a-star/introduction.html")
 
-(defn neighbors
+(defn- neighbors
   [[x y :as _point] [width height :as _grid-size]]
 
   ;; modulo is what makes edge traversal
@@ -15,7 +15,7 @@
    ;; right
    [(mod (inc x) width) y]])
 
-(defn path-chunks
+(defn- path-chunks
   [grid grid-size start goal]
   (loop [[current & others :as _frontier] [start]
          came-from {start nil}]
