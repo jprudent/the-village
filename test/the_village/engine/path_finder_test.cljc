@@ -1,6 +1,7 @@
 (ns the-village.engine.path-finder-test
-  (:require [clojure.test :refer :all])
-  (:require [the-village.engine.path-finder :as sut]))
+  (:require #?(:clj  [clojure.test :refer :all]
+               :cljs [cljs.test :refer-macros [deftest is run-tests testing]])
+            [the-village.engine.path-finder :as sut]))
 
 (deftest find-path*-test
   (testing "the simplest path finding"
@@ -39,19 +40,27 @@
              [2 2]))))
 
   (testing "impossible"
-      (is (= nil
-             (sut/find-path
-               {[1 0] :boulder
-                [3 0] :pit}
-               [4 1]
-               [0 0]
-               [2 0]))))
+    (is (= nil
+           (sut/find-path
+             {[1 0] :boulder
+              [3 0] :pit}
+             [4 1]
+             [0 0]
+             [2 0]))))
 
   (testing "I want to go in the tar pit, but I cant' climb boulders"
-        (is (= '([0 0] [3 0] [2 0])
-               (sut/find-path
-                 {[1 0] :boulder
-                  [2 0] :tar-pit}
-                 [4 1]
-                 [0 0]
-                 [2 0])))))
+    (is (= '([0 0] [3 0] [2 0])
+           (sut/find-path
+             {[1 0] :boulder
+              [2 0] :tar-pit}
+             [4 1]
+             [0 0]
+             [2 0]))))
+
+  (testing "real test case"
+     (is (= '([0 0])
+            (sut/find-path
+              {'(3 4) :well}
+              [10 8]
+              [0 0]
+              [3 4])))))

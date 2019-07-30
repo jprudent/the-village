@@ -16,6 +16,7 @@
    [(mod (inc x) width) y]])
 
 (defn- path-chunks
+  "All roads lead to Rome"
   [grid grid-size start goal]
   (loop [[current & others :as _frontier] [start]
          came-from {start nil}]

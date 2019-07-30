@@ -1,6 +1,7 @@
 (ns the-village.web.core
   (:require [quil.core :as q :include-macros true]
-            [the-village.utils.missing :as u]))
+            [the-village.utils.missing :as u]
+            [the-village.engine.path-finder :as path-finder]))
 
 ;; point utils
 (def x first)
@@ -16,19 +17,22 @@
   (map #(- 0xFF %) color))
 
 ;; 1 frame / second
-(def frame-rate 30)
+(def frame-rate 10)
 
 ;; the canva size in pixel
 ;; this is the visible part of the village
 ;; conceptually a village is infinite
 ;; values are incremented to make nice grid
 (def canva-size (map inc [500 400]))
-(def max-x (first canva-size))
-(def max-y (second canva-size))
+(def max-x (x canva-size))
+(def max-y (y canva-size))
 
 ;; the size of a cell in the village
 ;; for instance dwelling cell
 (def cell-size 50)
+
+(def grid-size [(/ (dec max-x) cell-size)
+                (/ (dec max-y) cell-size)])
 
 ;; [x y]
 (def icon-size cell-size)
@@ -55,11 +59,34 @@
               :dragging?        false
               :text             "BAKERY"}))
 
+(defrecord Villager
+  [;; id : every villager are registered at an office once
+   ;; they set foot in the village. Here a pleasant bureaucrat
+   ;; will give him/her a number that identifies him/her
+   ;; uniquely among the other. They are just numbers after
+   ;; all !
+   id
+   ;; hydration level : is an float ranging from 0 to 1
+   ;; when it reaches 0 this villager should die
+   ;; (unless he is not human, so why would he be thirsty ?)
+   ;; when it's 1, this human has quenched his thirst.
+   hydration-level])
+
+
+;; this villager is called Donald Trump because he is
+;; likely to die a lot during the early stages of the
+;; development of this game
+(def donald-trump
+  (map->Villager {:id 0 :hydration-level 0.2}))
+
 (defonce state (atom {:toolbar-icons
-                                {:well   well-icon
-                                 :dwell  dwell-icon
-                                 :bakery bakery-icon}
-                  :village-grid {}}))
+                                    {:well   well-icon
+                                     :dwell  dwell-icon
+                                     :bakery bakery-icon}
+                      ;; a map of {[x y] icon}
+                      :village-grid {}
+                      ;; a map of {[x y] villager}
+                      :villagers    {[0 0] donald-trump}}))
 
 (defn setup
   []
@@ -115,19 +142,19 @@
   [icon x y bg-color]
   (draw-icon (:text icon) x y bg-color))
 
-(defn cell-at-mouse-pos
+(defn cell-pos-at-mouse-pos
   []
   [(- (q/mouse-x) (mod (q/mouse-x) cell-size))
    (- (q/mouse-y) (mod (q/mouse-y) cell-size))])
 
 (defn preview-icon-at-mouse
   [icon]
-  (let [[x y] (cell-at-mouse-pos)]
+  (let [[x y] (cell-pos-at-mouse-pos)]
     (draw-icon-at icon x y (inverse-color icon-color))))
 
 (defn draw-icon-at-mouse
   [icon]
-  (let [[x y] (cell-at-mouse-pos)]
+  (let [[x y] (cell-pos-at-mouse-pos)]
     (draw-icon-at icon x y icon-color)))
 
 (defn dragging-icon? [] (:dragging-icon @state))
@@ -138,8 +165,13 @@
        (filter (fn [[_ icon :as kv]] (:dragging? icon)))
        (first)))
 
+(defn grid-pos-at-mouse-pos
+  []
+  (map #(/ % cell-size) (cell-pos-at-mouse-pos)))
+
 (defn move-mouse-icon
   []
+  ;; user was dragging an icon and he released
   (when-let [[icon-name _] (and (not (q/mouse-pressed?))
                                 (dragging-icon))]
     (do
@@ -149,8 +181,9 @@
                    (update :toolbar-icons
                            u/map-vals #(assoc % :dragging? false))
                    (update :village-grid
-                           assoc (cell-at-mouse-pos) icon-name))))))
+                           assoc (grid-pos-at-mouse-pos) icon-name))))))
 
+  ;; user started to drag an icon
   (when-let [icon-name (and (q/mouse-pressed?)
                             (< (y toolbar) (q/mouse-y) (y canva-size))
                             (some (fn [[icon-name icon]]
@@ -162,6 +195,7 @@
                                   (:toolbar-icons @state)))]
     (swap! state assoc-in [:toolbar-icons icon-name :dragging?] true))
 
+  ;; user is dragging an icon
   (when-let [[_ icon] (dragging-icon)]
     (do (preview-icon-at-mouse icon)
         (draw-icon-at icon
@@ -184,17 +218,105 @@
   []
   (doseq [[[x y] icon-name] (:village-grid @state)
           :let [icon (get-in @state [:toolbar-icons icon-name])]]
-    (draw-icon-at icon x y icon-color)))
+    (draw-icon-at icon (* cell-size x) (* cell-size y) icon-color)))
 
+(defn draw-villager
+  [villager x y]
+  (draw-icon (str (:id villager)) x y other-color))
+
+(defn draw-villagers
+  []
+  (doseq [[pos villager] (:villagers @state)]
+    (draw-villager villager
+                   (* (x pos) cell-size)
+                   (* cell-size (y pos)))))
+
+(defn debug-framerate
+  []
+  (q/with-fill [255 0 0]
+    (q/text-align :left)
+    (q/text (str (q/current-frame-rate)) 10 10)))
+
+;; If a villager die of dehydration in 48h
+;; that means he needs to walk regularly to the well,
+;; and bring back a full bucket of water to his house
+;; (this last part is not part of the simulation)
+
+(defn find-well-path
+  [start]
+  (if-let [well-xy (some (fn [[xy thing]]
+                           (when (= :well thing) xy))
+                         (:village-grid @state))]
+    (path-finder/find-path (:village-grid @state)
+                           grid-size
+                           start
+                           well-xy)))
+
+(defrecord Journey
+  [started-frame
+   path])
+
+(defn update-villagers
+  []
+  (doseq [[villager-xy {:keys [hydration-level journey]}] (:villagers @state)
+          :when (not journey)]
+    ;; hydration level is too low so go to the well
+    ;; (and there is nothing else to do in this shit hole)
+    (when-let [well-path (and (< 0 hydration-level 0.8)
+                              (find-well-path villager-xy))]
+      (do (prn "thirsty" well-path)
+          (swap! state assoc-in
+                 [:villagers villager-xy :journey]
+                 (map->Journey {:started-frame (q/frame-count)
+                                :path          well-path}))))))
+
+;; IRL a person can easily walk 4km per hour
+(def walking-speed-m-s (/ 3600 4000))
+
+;; 1 second in the game is that much seconds IRL
+(def game-speed 0.01)
+
+;; A cell should be more like 15 meters squared.
+(def cell-m 15)
+
+(def nb-frames-to-walk-a-cell
+  ;; nb of second to walk a cell IRL
+  (* cell-m walking-speed-m-s
+     ;; nb of frames to walk a cell IRL
+     frame-rate
+     ;; nb of frames to walk a cell in game
+     game-speed))
+
+(defn walk-villager
+  []
+  (doseq [[villager-xy {:keys [journey] :as villager}] (:villagers @state)
+          :when (some? journey)
+          :let [{:keys [started-frame path]} journey
+                [current-xy next-xy & _] path]]
+    (comment (assert (= current-xy villager-xy)))
+    (when (>= (- (q/frame-count) started-frame)
+           nb-frames-to-walk-a-cell)
+      (swap! state
+             (fn [state]
+               (-> (update state :villagers dissoc villager-xy)
+                   (update :villagers assoc next-xy
+                           (assoc villager :journey (map->Journey {:started-frame (q/frame-count)
+                                                                   :path          (rest path)})))))))))
 (defn draw []
   (apply q/background background-color)
-  (make-grid canva-size)
+  (make-grid canva-size)                
   (debug-mouse)
   (draw-toolbar-icons)
   (draw-grid-icons)
-  (mouse-handler))
+  (draw-villagers)
+  (mouse-handler)
+  (update-villagers)
+  (walk-villager)
+  (debug-framerate))
 
 (q/defsketch app
              :draw draw
              :host "app"
-             :size canva-size)   
+             :setup setup
+             :draw draw
+             :size canva-size)    
