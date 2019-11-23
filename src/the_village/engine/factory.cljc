@@ -12,9 +12,10 @@
                      :outputs {:filled-bucket 1}}})
 
 ;; -- things factory can trade
-(defrecord Free [])
-(defrecord Money [amount])
-(defrecord Good [amount])
+(defprotocol Tradable)
+(defrecord Free [] Tradable)
+(defrecord Money [amount] Tradable)
+(defrecord Good [amount] Tradable)
 
 ;; -- public interface of a factory
 (defprotocol Factory
