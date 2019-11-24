@@ -1,6 +1,9 @@
 (ns the-village.web.core
   (:require [quil.core :as q :include-macros true]
             [the-village.utils.missing :as u]
+            [the-village.web.grid :as grid]
+            [the-village.engine.villager :as villager]
+            [the-village.engine.journey :as journey]
             [the-village.engine.path-finder :as path-finder]))
 
 ;; point utils
@@ -16,8 +19,7 @@
 (defn inverse-color [color]
   (map #(- 0xFF %) color))
 
-;; 1 frame / second
-(def frame-rate 10)
+(def frame-rate 5)
 
 ;; the canva size in pixel
 ;; this is the visible part of the village
@@ -59,27 +61,43 @@
               :dragging?        false
               :text             "BAKERY"}))
 
-(defrecord Villager
-  [;; id : every villager are registered at an office once
-   ;; they set foot in the village. Here a pleasant bureaucrat
-   ;; will give him/her a number that identifies him/her
-   ;; uniquely among the other. They are just numbers after
-   ;; all !
-   id
-   ;; hydration level : is an float ranging from 0 to 1
-   ;; when it reaches 0 this villager should die
-   ;; (unless he is not human, so why would he be thirsty ?)
-   ;; when it's 1, this human has quenched his thirst.
-   hydration-level])
+
+;; IRL a person can easily walk 4km per hour
+(def walking-speed-m-s (/ 3600 4000))
+
+;; 1 second in the game is that much seconds IRL
+(def game-speed 0.01)
+
+;; A cell should be more like 15 meters squared.
+(def cell-m 15)
 
 
 ;; this villager is called Donald Trump because he is
 ;; likely to die a lot during the early stages of the
 ;; development of this game
-(def donald-trump
-  (map->Villager {:id 0 :hydration-level 0.2}))
+(def donald-trump (villager/new (:conf @state)))
 
-(defonce state (atom {:toolbar-icons
+(defn find-path
+  "find a path from coordinate to something matching pred"
+  [from-xy pred]
+  (if-let [well-xy (some (fn [[xy thing]]
+                           (when (pred thing) xy))
+                         (:village-grid @state))]
+    (path-finder/find-path (:village-grid @state)
+                           grid-size
+                           from-xy
+                           well-xy)))
+
+(defonce cpt (atom 0))
+(defonce state (atom {:conf         {;; give time as an natural number
+                                     :time-provider q/frame-count
+                                     :id-provider #(swap! cpt inc)
+                                     :path-finder   find-path
+                                     ;; IRL durations must be applied to this ratio
+                                     ;; 1 second in the game is that much seconds IRL
+                                     :game-speed game-speed}
+
+                      :toolbar-icons
                                     {:well   well-icon
                                      :dwell  dwell-icon
                                      :bakery bakery-icon}
@@ -93,17 +111,7 @@
   (q/frame-rate frame-rate)
   (apply q/background background-color))
 
-(defn make-grid
-  [[max-x max-y]]
-  (q/with-stroke grid-color
-    ;; horizontal
-    (doseq [hline-i (range (/ max-x cell-size))
-            :let [x (* cell-size hline-i)]]
-      (q/line x 0 x max-y))
-    ;; vertical
-    (doseq [vline-i (range (/ max-y cell-size))
-            :let [y (* cell-size vline-i)]]
-      (q/line 0 y max-x y))))
+
 
 (defn debug-mouse []
   (doseq [[ind capt fn] [[0 "mouse-button" q/mouse-button]
@@ -162,7 +170,7 @@
 (defn dragging-icon
   []
   (->> (:toolbar-icons @state)
-       (filter (fn [[_ icon :as kv]] (:dragging? icon)))
+       (filter (fn [[_ icon :as _kv]] (:dragging? icon)))
        (first)))
 
 (defn grid-pos-at-mouse-pos
@@ -237,47 +245,16 @@
     (q/text-align :left)
     (q/text (str (q/current-frame-rate)) 10 10)))
 
-;; If a villager die of dehydration in 48h
-;; that means he needs to walk regularly to the well,
-;; and bring back a full bucket of water to his house
-;; (this last part is not part of the simulation)
 
-(defn find-well-path
-  [start]
-  (if-let [well-xy (some (fn [[xy thing]]
-                           (when (= :well thing) xy))
-                         (:village-grid @state))]
-    (path-finder/find-path (:village-grid @state)
-                           grid-size
-                           start
-                           well-xy)))
 
-(defrecord Journey
-  [started-frame
-   path])
+
 
 (defn update-villagers
+  "update the state with updated villagers"
   []
-  (doseq [[villager-xy {:keys [hydration-level journey]}] (:villagers @state)
-          :when (not journey)]
-    ;; hydration level is too low so go to the well
-    ;; (and there is nothing else to do in this shit hole)
-    (when-let [well-path (and (< 0 hydration-level 0.8)
-                              (find-well-path villager-xy))]
-      (do (prn "thirsty" well-path)
-          (swap! state assoc-in
-                 [:villagers villager-xy :journey]
-                 (map->Journey {:started-frame (q/frame-count)
-                                :path          well-path}))))))
+  (swap! state update :villagers u/map-vals villager/update-villager (:conf @state)))
 
-;; IRL a person can easily walk 4km per hour
-(def walking-speed-m-s (/ 3600 4000))
 
-;; 1 second in the game is that much seconds IRL
-(def game-speed 0.01)
-
-;; A cell should be more like 15 meters squared.
-(def cell-m 15)
 
 (def nb-frames-to-walk-a-cell
   ;; nb of second to walk a cell IRL
@@ -292,19 +269,20 @@
   (doseq [[villager-xy {:keys [journey] :as villager}] (:villagers @state)
           :when (some? journey)
           :let [{:keys [started-frame path]} journey
-                [current-xy next-xy & _] path]]
+                [current-xy next-xy & _] path
+                current-frame (q/frame-count)]
+          :when (>= (- current-frame started-frame) nb-frames-to-walk-a-cell)]
     (comment (assert (= current-xy villager-xy)))
-    (when (>= (- (q/frame-count) started-frame)
-           nb-frames-to-walk-a-cell)
-      (swap! state
-             (fn [state]
-               (-> (update state :villagers dissoc villager-xy)
-                   (update :villagers assoc next-xy
-                           (assoc villager :journey (map->Journey {:started-frame (q/frame-count)
-                                                                   :path          (rest path)})))))))))
+    (swap! state
+           (fn [state]
+             (-> (update state :villagers dissoc villager-xy)
+                 (update :villagers assoc next-xy
+                         (assoc villager
+                           :journey
+                           (journey/step-traveled journey q/frame-count))))))))
 (defn draw []
   (apply q/background background-color)
-  (make-grid canva-size)                
+  (grid/make-grid canva-size :cell-size cell-size :grid-color grid-color)
   (debug-mouse)
   (draw-toolbar-icons)
   (draw-grid-icons)
