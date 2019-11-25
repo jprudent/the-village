@@ -23,7 +23,7 @@
   "Does this `villager` is `thirsty` ?"
   [{:keys [hydration-level] :as _villager}]
   (and (not (willing-to? _villager :villager.will/drink))
-       (< 0 hydration-level 0.8)))
+       (< hydration-level 0.99)))
 
 (defn willing-to
   "Prepend `will` to list of wills of `villager`"
@@ -97,9 +97,9 @@
 
   Vital
   (update-vitals
-    [this {:keys [game-speed time-provider] :as conf}]
+    [this {:keys [seconds->ticks time-provider] :as conf}]
     ;; a villager will die of dehydration in 48h
-    (let [dehydration-per-tick (/ 1 (game-speed (* 48 3600)))
+    (let [dehydration-per-tick (/ 1 (seconds->ticks  (* 48 3600)))
           nb-ticks             (- (time-provider) last-update)
           dehydration          (* dehydration-per-tick nb-ticks)]
       (update this :hydration-level

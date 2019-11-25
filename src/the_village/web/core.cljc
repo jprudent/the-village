@@ -66,50 +66,66 @@
 (def walking-speed-m-s (/ 3600 4000))
 
 ;; 1 second in the game is that much seconds IRL
-(def game-speed 0.01)
+;; if game-speed is 0.01, time passes 100 times
+;; faster in game than IRL. So imagine you can run IRL
+;; a 100m speed race in 10s (not bad!), if you lived in
+;; the game, you would run it in 100ms. This ratio is used
+;; to speed up the game, otherwise it would take forever
+;; to walk a 15m cell !
+(def game-speed (/ 1 12))
 
 ;; A cell should be more like 15 meters squared.
 (def cell-m 15)
 
 
-;; this villager is called Donald Trump because he is
-;; likely to die a lot during the early stages of the
-;; development of this game
-(def donald-trump (villager/new (:conf @state)))
-
 (defn find-path
   "find a path from coordinate to something matching pred"
-  [from-xy pred]
+  [{:keys [village-grid] :as _state}
+   from-xy
+   pred]
   (if-let [well-xy (some (fn [[xy thing]]
                            (when (pred thing) xy))
-                         (:village-grid @state))]
-    (path-finder/find-path (:village-grid @state)
+                         village-grid)]
+    (path-finder/find-path village-grid
                            grid-size
                            from-xy
                            well-xy)))
 
 (defonce cpt (atom 0))
-(defonce state (atom {:conf         {;; give time as an natural number
-                                     :time-provider q/frame-count
-                                     :id-provider #(swap! cpt inc)
-                                     :path-finder   find-path
-                                     ;; IRL durations must be applied to this ratio
-                                     ;; 1 second in the game is that much seconds IRL
-                                     :game-speed game-speed}
+(def conf {;; give time as an natural number. It should be
+           ;; interpreted as number of ticks since game
+           ;; started. A tick being the smallest unit of
+           ;; time of the (discrete) simulation.
+           :time-provider  q/frame-count
+           :id-provider    #(swap! cpt inc)
+           :path-finder    (partial find-path @state)
+           ;; IRL durations must be applied to this ratio
+           ;; 1 second IRL is that much ticks in the game.
+           ;; If the simulation need to be "time consistant"
+           ;; game-speed must be related to what time-provider
+           ;; is based upon.
+           ;; (game-speed 2) will give you the number of
+           :seconds->ticks #(* % (/ 1 frame-rate) game-speed)})
 
+(defn spawn-villager
+  [state]
+  (swap! state update :villagers conj [[0 0] (villager/spawn conf)]))
+
+(defonce state (atom {:conf         conf
                       :toolbar-icons
-                                    {:well   well-icon
-                                     :dwell  dwell-icon
-                                     :bakery bakery-icon}
+                                    {:village.factory/well   well-icon
+                                     :village.factory/dwell  dwell-icon
+                                     :village.factory/bakery bakery-icon}
                       ;; a map of {[x y] icon}
                       :village-grid {}
                       ;; a map of {[x y] villager}
-                      :villagers    {[0 0] donald-trump}}))
+                      :villagers    {}}))
 
 (defn setup
   []
   (q/frame-rate frame-rate)
-  (apply q/background background-color))
+  (apply q/background background-color)
+  (spawn-villager state))
 
 
 
@@ -243,7 +259,7 @@
   []
   (q/with-fill [255 0 0]
     (q/text-align :left)
-    (q/text (str (q/current-frame-rate)) 10 10)))
+    (q/text (str (q/current-frame-rate) "fps|" (q/frame-count) "frames") 10 10)))
 
 
 
@@ -252,7 +268,7 @@
 (defn update-villagers
   "update the state with updated villagers"
   []
-  (swap! state update :villagers u/map-vals villager/update-villager (:conf @state)))
+  (swap! state update :villagers u/map-vals #(villager/update-villager % conf)))
 
 
 
@@ -284,13 +300,13 @@
   (apply q/background background-color)
   (grid/make-grid canva-size :cell-size cell-size :grid-color grid-color)
   (debug-mouse)
+  (debug-framerate)
   (draw-toolbar-icons)
   (draw-grid-icons)
-  (draw-villagers)
   (mouse-handler)
+  (draw-villagers)
   (update-villagers)
-  (walk-villager)
-  (debug-framerate))
+  #_(walk-villager))
 
 (q/defsketch app
              :draw draw

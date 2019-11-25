@@ -37,7 +37,6 @@
           villager'  (sut/update-villager villager conf)
           _          (is (= [:villager.will/drink] (:wills villager')))
           _          (is (not (villager/on-journey? villager')))
-          _          (prn villager')
 
           _          (tick! time)
           villager'' (sut/update-villager villager' conf)
