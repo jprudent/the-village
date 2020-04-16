@@ -91,6 +91,15 @@
                            from-xy
                            well-xy)))
 
+(defonce state (atom {:toolbar-icons
+                      {:village.factory/well   well-icon
+                       :village.factory/dwell  dwell-icon
+                       :village.factory/bakery bakery-icon}
+                      ;; a map of {[x y] icon}
+                      :village-grid {}
+                      ;; a map of {[x y] villager}
+                      :villagers    {}}))
+
 (defonce cpt (atom 0))
 (def conf {;; give time as an natural number. It should be
            ;; interpreted as number of ticks since game
@@ -110,16 +119,6 @@
 (defn spawn-villager
   [state]
   (swap! state update :villagers conj [[0 0] (villager/spawn conf)]))
-
-(defonce state (atom {:conf         conf
-                      :toolbar-icons
-                                    {:village.factory/well   well-icon
-                                     :village.factory/dwell  dwell-icon
-                                     :village.factory/bakery bakery-icon}
-                      ;; a map of {[x y] icon}
-                      :village-grid {}
-                      ;; a map of {[x y] villager}
-                      :villagers    {}}))
 
 (defn setup
   []
