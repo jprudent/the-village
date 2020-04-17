@@ -17,4 +17,4 @@
   [journey time-provider]
   (-> journey
       (update :path rest)
-      (update :started-time (time-provider))))
+      (update :started-time time-provider)))

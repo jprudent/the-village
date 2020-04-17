@@ -261,13 +261,11 @@
     (q/text (str (q/current-frame-rate) "fps|" (q/frame-count) "frames") 10 10)))
 
 
-
-
-
 (defn update-villagers
   "update the state with updated villagers"
   []
-  (swap! state update :villagers u/map-vals #(villager/update-villager % conf)))
+  (swap! state update :villagers
+         u/map-vals #(villager/update-villager % conf)))
 
 
 
@@ -283,10 +281,10 @@
   []
   (doseq [[villager-xy {:keys [journey] :as villager}] (:villagers @state)
           :when (some? journey)
-          :let [{:keys [started-frame path]} journey
+          :let [{:keys [started-time path]} journey
                 [current-xy next-xy & _] path
                 current-frame (q/frame-count)]
-          :when (>= (- current-frame started-frame) nb-frames-to-walk-a-cell)]
+          :when (>= (- current-frame started-time) nb-frames-to-walk-a-cell)]
     (comment (assert (= current-xy villager-xy)))
     (swap! state
            (fn [state]
@@ -305,7 +303,7 @@
   (mouse-handler)
   (draw-villagers)
   (update-villagers)
-  #_(walk-villager))
+  (walk-villager))
 
 (q/defsketch app
              :draw draw
